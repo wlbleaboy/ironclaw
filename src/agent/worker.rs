@@ -41,6 +41,8 @@ pub struct WorkerDeps {
     /// blocked (legacy behavior). When `Some`, the context determines which tools
     /// are pre-approved for autonomous execution.
     pub approval_context: Option<ApprovalContext>,
+    /// HTTP interceptor for trace recording/replay (propagated to JobContext).
+    pub http_interceptor: Option<Arc<dyn crate::llm::recording::HttpInterceptor>>,
 }
 
 /// Worker that executes a single job.
@@ -694,7 +696,11 @@ Report when the job is complete or if you encounter issues you cannot resolve."#
         }
 
         // Fetch job context early so we have the real user_id for hooks and rate limiting
-        let job_ctx = deps.context_manager.get_context(job_id).await?;
+        let mut job_ctx = deps.context_manager.get_context(job_id).await?;
+        // Propagate http_interceptor for trace recording/replay
+        if job_ctx.http_interceptor.is_none() {
+            job_ctx.http_interceptor = deps.http_interceptor.clone();
+        }
 
         // Check per-tool rate limit before running hooks or executing (cheaper check first)
         if let Some(config) = tool.rate_limit_config()
@@ -1313,6 +1319,7 @@ mod tests {
             use_planning: false,
             sse_tx: None,
             approval_context: None,
+            http_interceptor: None,
         };
 
         Worker::new(job_id, deps)
@@ -1573,6 +1580,7 @@ mod tests {
             use_planning: false,
             sse_tx: None,
             approval_context,
+            http_interceptor: None,
         };
 
         Worker::new(job_id, deps)

@@ -26,6 +26,8 @@ use crate::support::metrics::{ToolInvocation, TraceMetrics};
 use crate::support::test_channel::TestChannel;
 use crate::support::trace_llm::{LlmTrace, TraceLlm};
 
+use ironclaw::llm::recording::{HttpExchange, ReplayingHttpInterceptor};
+
 // ---------------------------------------------------------------------------
 // TestChannelHandle -- wraps Arc<TestChannel> as Box<dyn Channel>
 // ---------------------------------------------------------------------------
@@ -353,6 +355,7 @@ pub struct TestRigBuilder {
     max_tool_iterations: usize,
     injection_check: bool,
     enable_routines: bool,
+    http_exchanges: Vec<HttpExchange>,
 }
 
 impl TestRigBuilder {
@@ -364,6 +367,7 @@ impl TestRigBuilder {
             max_tool_iterations: 10,
             injection_check: false,
             enable_routines: false,
+            http_exchanges: Vec::new(),
         }
     }
 
@@ -399,6 +403,15 @@ impl TestRigBuilder {
     /// are registered and functional.
     pub fn with_routines(mut self) -> Self {
         self.enable_routines = true;
+        self
+    }
+
+    /// Add pre-recorded HTTP exchanges for the `ReplayingHttpInterceptor`.
+    ///
+    /// When set, all `http` tool calls will return these responses in order
+    /// instead of making real network requests.
+    pub fn with_http_exchanges(mut self, exchanges: Vec<HttpExchange>) -> Self {
+        self.http_exchanges = exchanges;
         self
     }
 
@@ -492,7 +505,12 @@ impl TestRigBuilder {
             hooks: components.hooks,
             cost_guard: components.cost_guard,
             sse_tx: None,
-            http_interceptor: None,
+            http_interceptor: if self.http_exchanges.is_empty() {
+                None
+            } else {
+                Some(Arc::new(ReplayingHttpInterceptor::new(self.http_exchanges))
+                    as Arc<dyn ironclaw::llm::recording::HttpInterceptor>)
+            },
         };
 
         // 7. Create TestChannel and ChannelManager.

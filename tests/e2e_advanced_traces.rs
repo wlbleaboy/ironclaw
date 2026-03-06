@@ -262,17 +262,46 @@ mod advanced {
 
     #[tokio::test]
     async fn routine_news_digest() {
+        use ironclaw::llm::recording::{HttpExchange, HttpExchangeRequest, HttpExchangeResponse};
+
         let trace = LlmTrace::from_file(format!("{FIXTURES}/routine_news_digest.json")).unwrap();
+
+        // Mock HTTP response for the news API call made by the routine worker.
+        let http_exchanges = vec![HttpExchange {
+            request: HttpExchangeRequest {
+                method: "GET".to_string(),
+                url: "https://news-api.example.com/v1/tech/headlines".to_string(),
+                headers: Vec::new(),
+                body: None,
+            },
+            response: HttpExchangeResponse {
+                status: 200,
+                headers: vec![(
+                    "content-type".to_string(),
+                    "application/json".to_string(),
+                )],
+                body: serde_json::json!({
+                    "headlines": [
+                        {"title": "Rust 2026 Edition", "summary": "async closures, generator syntax"},
+                        {"title": "WASM Component Model 1.0", "summary": "cross-language interop"},
+                        {"title": "NEAR AI Agent Framework", "summary": "on-chain identity"}
+                    ]
+                })
+                .to_string(),
+            },
+        }];
+
         let rig = TestRigBuilder::new()
             .with_trace(trace.clone())
             .with_routines()
+            .with_http_exchanges(http_exchanges)
             .build()
             .await;
 
-        // Turn 1: Create the routine (manual trigger, full_job, message pre-authorized).
+        // Turn 1: Create the routine (manual trigger, full_job, message+http pre-authorized).
         rig.send_message(
             "Set up a morning tech news routine with manual trigger \
-             and full_job mode. Pre-authorize the message tool.",
+             and full_job mode. Pre-authorize the message and http tools.",
         )
         .await;
         let r1 = rig.wait_for_responses(1, TIMEOUT).await;
@@ -284,8 +313,9 @@ mod advanced {
         );
 
         // Turn 2: Fire the routine. This dispatches a full_job through the scheduler.
-        // The routine worker runs asynchronously and consumes TraceLlm steps for
-        // echo, memory_write, and message tool calls.
+        // The routine worker runs autonomously and consumes TraceLlm steps for
+        // http, memory_write, and message tool calls. The http tool uses the
+        // ReplayingHttpInterceptor to return the mock news API response.
         rig.send_message("Fire it now.").await;
 
         // Wait for:
@@ -301,10 +331,10 @@ mod advanced {
             "Turn 2: expected fired/running, got: {fire_reply}"
         );
 
-        // The routine worker runs autonomously: echo → memory_write → message.
+        // The routine worker runs autonomously: http → memory_write → message.
         // The message tool broadcasts to the test channel, proving the full
         // chain executed successfully (including ApprovalContext allowing the
-        // Always-approval message tool in autonomous mode).
+        // http and message tools in autonomous mode).
         let message_broadcast = responses.iter().find(|r| {
             r.content.contains("Tech News Digest")
                 || r.content.contains("Rust 2026")

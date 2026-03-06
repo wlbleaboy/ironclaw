@@ -56,6 +56,8 @@ pub struct Scheduler {
     hooks: Arc<HookRegistry>,
     /// SSE broadcast sender for live job event streaming.
     sse_tx: Option<tokio::sync::broadcast::Sender<SseEvent>>,
+    /// HTTP interceptor for trace recording/replay (propagated to workers).
+    http_interceptor: Option<Arc<dyn crate::llm::recording::HttpInterceptor>>,
     /// Running jobs (main LLM-driven jobs).
     jobs: Arc<RwLock<HashMap<Uuid, ScheduledJob>>>,
     /// Running sub-tasks (tool executions, background tasks).
@@ -82,6 +84,7 @@ impl Scheduler {
             store,
             hooks,
             sse_tx: None,
+            http_interceptor: None,
             jobs: Arc::new(RwLock::new(HashMap::new())),
             subtasks: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -90,6 +93,14 @@ impl Scheduler {
     /// Set the SSE broadcast sender for live job event streaming.
     pub fn set_sse_sender(&mut self, tx: tokio::sync::broadcast::Sender<SseEvent>) {
         self.sse_tx = Some(tx);
+    }
+
+    /// Set the HTTP interceptor for trace recording/replay.
+    pub fn set_http_interceptor(
+        &mut self,
+        interceptor: Arc<dyn crate::llm::recording::HttpInterceptor>,
+    ) {
+        self.http_interceptor = Some(interceptor);
     }
 
     /// Create, persist, and schedule a job in one shot.
@@ -226,6 +237,7 @@ impl Scheduler {
                 use_planning: self.config.use_planning,
                 sse_tx: self.sse_tx.clone(),
                 approval_context,
+                http_interceptor: self.http_interceptor.clone(),
             };
             let worker = Worker::new(job_id, deps);
 
