@@ -235,18 +235,14 @@ fn convert_messages(messages: &[ChatMessage]) -> (Option<String>, Vec<RigMessage
                     history.push(RigMessage::user(&msg.content));
                 } else {
                     // Build multimodal user message with text + image parts
-                    let mut contents: Vec<UserContent> =
-                        vec![UserContent::text(&msg.content)];
+                    let mut contents: Vec<UserContent> = vec![UserContent::text(&msg.content)];
                     for part in &msg.content_parts {
                         if let crate::llm::ContentPart::ImageUrl { image_url } = part {
                             // Parse data: URL for base64 images, or use raw URL
-                            let image = if let Some(rest) =
-                                image_url.url.strip_prefix("data:")
-                            {
+                            let image = if let Some(rest) = image_url.url.strip_prefix("data:") {
                                 // Format: data:<mime>;base64,<data>
-                                let (mime, b64) = rest
-                                    .split_once(";base64,")
-                                    .unwrap_or(("image/jpeg", rest));
+                                let (mime, b64) =
+                                    rest.split_once(";base64,").unwrap_or(("image/jpeg", rest));
                                 Image {
                                     data: DocumentSourceKind::base64(b64),
                                     media_type: ImageMediaType::from_mime_type(mime),

@@ -195,9 +195,11 @@ mod tests {
         assert!(result.text.contains("filename=\"screenshot.png\""));
         assert!(result.text.contains("mime=\"image/png\""));
         assert!(result.text.contains("size=\"239KB\""));
-        assert!(result
-            .text
-            .contains("[Image attached — visual content not available in this conversation]"));
+        assert!(
+            result
+                .text
+                .contains("[Image attached — visual content not available in this conversation]")
+        );
         assert!(result.image_parts.is_empty());
     }
 
@@ -209,7 +211,11 @@ mod tests {
         att.data = vec![0xFF, 0xD8, 0xFF]; // fake JPEG header
 
         let result = augment_with_attachments("look", &[att]).unwrap();
-        assert!(result.text.contains("[Image attached — sent as visual content]"));
+        assert!(
+            result
+                .text
+                .contains("[Image attached — sent as visual content]")
+        );
         assert_eq!(result.image_parts.len(), 1);
         match &result.image_parts[0] {
             ContentPart::ImageUrl { image_url } => {
@@ -241,9 +247,11 @@ mod tests {
         let result = augment_with_attachments("analyze", &[att]).unwrap();
         assert!(result.text.contains("type=\"document\""));
         assert!(result.text.contains("mime=\"text/csv\""));
-        assert!(result
-            .text
-            .contains("[Document attached — text extraction unavailable]"));
+        assert!(
+            result
+                .text
+                .contains("[Document attached — text extraction unavailable]")
+        );
     }
 
     #[test]

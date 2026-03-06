@@ -668,7 +668,9 @@ impl<'de> Deserialize<'de> for MessageContent {
                     .unwrap_or_default(),
             )),
             Value::Null => Ok(MessageContent::Text(String::new())),
-            _ => Err(de::Error::custom("expected string, array, or null for content")),
+            _ => Err(de::Error::custom(
+                "expected string, array, or null for content",
+            )),
         }
     }
 }
@@ -875,11 +877,7 @@ fn flatten_tool_messages(messages: Vec<ChatCompletionMessage>) -> Vec<ChatComple
             } else if msg.role == "tool" {
                 // Convert tool result into a user message
                 let tool_name = msg.name.as_deref().unwrap_or("unknown");
-                let result = msg
-                    .content
-                    .as_ref()
-                    .and_then(|c| c.as_text())
-                    .unwrap_or("");
+                let result = msg.content.as_ref().and_then(|c| c.as_text()).unwrap_or("");
                 ChatCompletionMessage {
                     role: "user".to_string(),
                     content: Some(MessageContent::Text(format!(
@@ -925,9 +923,7 @@ impl From<ChatMessage> for ChatCompletionMessage {
             None
         } else if !msg.content_parts.is_empty() {
             // Build multimodal content array: text + image parts
-            let mut parts = vec![crate::llm::ContentPart::Text {
-                text: msg.content,
-            }];
+            let mut parts = vec![crate::llm::ContentPart::Text { text: msg.content }];
             parts.extend(msg.content_parts);
             Some(MessageContent::Parts(parts))
         } else {
@@ -1282,7 +1278,11 @@ mod tests {
         ];
 
         let result = flatten_tool_messages(messages);
-        let text = result[0].content.as_ref().and_then(|c| c.as_text()).unwrap();
+        let text = result[0]
+            .content
+            .as_ref()
+            .and_then(|c| c.as_text())
+            .unwrap();
         assert!(text.starts_with("Let me check that."));
         assert!(text.contains("[Called tool `search`"));
     }

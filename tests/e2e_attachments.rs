@@ -61,7 +61,10 @@ mod attachment_tests {
         let responses = rig.wait_for_responses(1, TIMEOUT).await;
 
         // Verify the response was received
-        assert!(!responses.is_empty(), "should receive at least one response");
+        assert!(
+            !responses.is_empty(),
+            "should receive at least one response"
+        );
 
         // Verify the augmented content reached the LLM
         let requests = rig.captured_llm_requests();
@@ -117,13 +120,17 @@ mod attachment_tests {
         att.size_bytes = Some(1024);
         att.data = vec![0x89, 0x50, 0x4E, 0x47]; // PNG magic bytes (fake)
 
-        let mut msg = IncomingMessage::new("test", "test-user", "What do you see in this screenshot?");
+        let mut msg =
+            IncomingMessage::new("test", "test-user", "What do you see in this screenshot?");
         msg.attachments.push(att);
 
         rig.send_incoming(msg).await;
         let responses = rig.wait_for_responses(1, TIMEOUT).await;
 
-        assert!(!responses.is_empty(), "should receive at least one response");
+        assert!(
+            !responses.is_empty(),
+            "should receive at least one response"
+        );
 
         // Verify multimodal content parts reached the LLM
         let requests = rig.captured_llm_requests();
@@ -170,8 +177,7 @@ mod attachment_tests {
     /// Message without attachments should have no content_parts and no augmentation.
     #[tokio::test]
     async fn no_attachments_no_augmentation() {
-        let trace =
-            LlmTrace::from_file(format!("{FIXTURES}/smoke_greeting.json")).unwrap();
+        let trace = LlmTrace::from_file(format!("{FIXTURES}/smoke_greeting.json")).unwrap();
         let rig = TestRigBuilder::new()
             .with_trace(trace.clone())
             .build()

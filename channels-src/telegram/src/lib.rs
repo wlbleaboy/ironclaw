@@ -2369,6 +2369,7 @@ mod tests {
             "voice": {
                 "file_id": "voice_xyz",
                 "file_unique_id": "v1",
+                "duration": 5,
                 "mime_type": "audio/ogg",
                 "file_size": 9000
             }
