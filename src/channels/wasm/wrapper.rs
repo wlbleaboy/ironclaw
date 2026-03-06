@@ -2991,8 +2991,19 @@ fn read_attachments(paths: &[String]) -> Result<Vec<wit_channel::Attachment>, St
 
     let mut attachments = Vec::with_capacity(paths.len());
     let mut total_bytes: u64 = 0;
+    let tmp_base = std::path::Path::new("/tmp");
 
     for path in paths {
+        // Validate paths are under /tmp/ to prevent arbitrary file reads
+        if !path.starts_with("/tmp/") {
+            return Err(format!(
+                "Invalid attachment path '{}': must be under /tmp/",
+                path
+            ));
+        }
+        crate::tools::builtin::path_utils::validate_path(path, Some(tmp_base))
+            .map_err(|e| format!("Invalid attachment path '{}': {}", path, e))?;
+
         let data = std::fs::read(path)
             .map_err(|e| format!("Failed to read attachment '{}': {}", path, e))?;
 

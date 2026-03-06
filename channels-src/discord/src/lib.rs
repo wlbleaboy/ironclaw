@@ -691,10 +691,8 @@ mod tests {
     }
 
     #[test]
-    fn test_discord_emit_message_has_empty_attachments() {
-        // Discord currently doesn't parse attachments from interactions,
-        // so emitted messages should have empty attachment lists.
-        // This tests backward compatibility.
+    fn test_parse_slash_command_interaction() {
+        // Verify that a slash command interaction deserializes correctly.
         let json = r#"{
             "type": 2,
             "id": "int_1",

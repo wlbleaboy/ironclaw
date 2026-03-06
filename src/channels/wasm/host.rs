@@ -58,6 +58,7 @@ const ALLOWED_MIME_PREFIXES: &[&str] = &[
     "application/zip",
     "application/gzip",
     "application/x-tar",
+    "application/octet-stream",
 ];
 
 /// A message emitted by a WASM channel to be sent to the agent.
@@ -310,13 +311,17 @@ impl ChannelHostState {
                 return false;
             }
 
-            // Use explicit size_bytes if available, otherwise check stored data
+            // Use the larger of reported size_bytes and actual stored data size
+            // to prevent WASM channels from under-reporting to bypass limits.
             let stored_size = self
                 .attachment_data
                 .get(&att.id)
                 .map(|d| d.len() as u64)
                 .unwrap_or(att.data.len() as u64);
-            let size = att.size_bytes.unwrap_or(stored_size);
+            let size = att
+                .size_bytes
+                .map(|reported| reported.max(stored_size))
+                .unwrap_or(stored_size);
             if size > 0 {
                 total_size = total_size.saturating_add(size);
                 if total_size > MAX_ATTACHMENT_TOTAL_SIZE {
@@ -374,7 +379,14 @@ impl ChannelHostState {
             });
         }
 
-        let new_total = self.attachment_data_total.saturating_add(size);
+        // Subtract the old entry size (if overwriting) before adding new size
+        let old_size = self
+            .attachment_data
+            .get(attachment_id)
+            .map(|d| d.len() as u64)
+            .unwrap_or(0);
+        let adjusted_total = self.attachment_data_total.saturating_sub(old_size);
+        let new_total = adjusted_total.saturating_add(size);
         if new_total > MAX_TOTAL {
             return Err(WasmChannelError::CallbackFailed {
                 name: self.channel_name.clone(),

@@ -1,4 +1,4 @@
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::SecretString;
 
 use crate::config::helpers::{optional_env, parse_bool_env};
 use crate::error::ConfigError;
@@ -67,10 +67,8 @@ impl TranscriptionConfig {
         let api_key = self.openai_api_key.as_ref()?;
         tracing::info!(model = %self.model, "Audio transcription enabled via OpenAI Whisper");
 
-        let mut provider = crate::transcription::OpenAiWhisperProvider::new(SecretString::from(
-            api_key.expose_secret().to_string(),
-        ))
-        .with_model(&self.model);
+        let mut provider = crate::transcription::OpenAiWhisperProvider::new(api_key.clone())
+            .with_model(&self.model);
 
         if let Some(ref base_url) = self.base_url {
             provider = provider.with_base_url(base_url);

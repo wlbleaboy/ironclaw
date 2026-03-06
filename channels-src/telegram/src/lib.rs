@@ -680,64 +680,7 @@ impl Guest for TelegramChannel {
         let metadata: TelegramMessageMetadata = serde_json::from_str(&response.metadata_json)
             .map_err(|e| format!("Failed to parse metadata: {}", e))?;
 
-        // Send attachments first (photos/documents)
-        for attachment in &response.attachments {
-            send_attachment(
-                metadata.chat_id,
-                attachment,
-                Some(metadata.message_id),
-            )?;
-        }
-
-        // Send text content (skip if empty and we already sent attachments)
-        if response.content.is_empty() && !response.attachments.is_empty() {
-            return Ok(());
-        }
-
-        // Try sending with Markdown first; fall back to plain text if Telegram
-        // can't parse the entities (e.g. model leaked <tool_call> with underscores).
-        let result = send_message(
-            metadata.chat_id,
-            &response.content,
-            Some(metadata.message_id),
-            Some("Markdown"),
-        );
-
-        match result {
-            Ok(msg_id) => {
-                channel_host::log(
-                    channel_host::LogLevel::Debug,
-                    &format!(
-                        "Sent message to chat {}: message_id={}",
-                        metadata.chat_id, msg_id
-                    ),
-                );
-                Ok(())
-            }
-            Err(SendError::ParseEntities(detail)) => {
-                channel_host::log(
-                    channel_host::LogLevel::Warn,
-                    &format!("Markdown parse failed ({}), retrying as plain text", detail),
-                );
-                let msg_id = send_message(
-                    metadata.chat_id,
-                    &response.content,
-                    Some(metadata.message_id),
-                    None,
-                )
-                .map_err(|e| format!("Plain-text retry also failed: {}", e))?;
-
-                channel_host::log(
-                    channel_host::LogLevel::Debug,
-                    &format!(
-                        "Sent plain-text message to chat {}: message_id={}",
-                        metadata.chat_id, msg_id
-                    ),
-                );
-                Ok(())
-            }
-            Err(e) => Err(e.to_string()),
-        }
+        send_response(metadata.chat_id, &response, Some(metadata.message_id))
     }
 
     fn on_broadcast(user_id: String, response: AgentResponse) -> Result<(), String> {
@@ -745,26 +688,7 @@ impl Guest for TelegramChannel {
             .parse()
             .map_err(|e| format!("Invalid chat_id '{}': {}", user_id, e))?;
 
-        // Send attachments first
-        for attachment in &response.attachments {
-            send_attachment(chat_id, attachment, None)?;
-        }
-
-        // Send text content (skip if empty and we already sent attachments)
-        if response.content.is_empty() && !response.attachments.is_empty() {
-            return Ok(());
-        }
-
-        // Try Markdown, fall back to plain text
-        match send_message(chat_id, &response.content, None, Some("Markdown")) {
-            Ok(_) => Ok(()),
-            Err(SendError::ParseEntities(_)) => {
-                send_message(chat_id, &response.content, None, None)
-                    .map(|_| ())
-                    .map_err(|e| format!("Plain-text retry also failed: {}", e))
-            }
-            Err(e) => Err(e.to_string()),
-        }
+        send_response(chat_id, &response, None)
     }
 
     fn on_status(update: StatusUpdate) {
@@ -958,6 +882,22 @@ fn send_message(
 ///
 /// 1. Call getFile to get the file_path.
 /// 2. Download the file bytes from /file/bot{TOKEN}/{file_path}.
+/// Percent-encode a string for safe use as a URL query parameter value.
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => {
+                out.push_str(&format!("%{:02X}", b));
+            }
+        }
+    }
+    out
+}
+
 fn download_voice_file(file_id: &str) -> Result<Vec<u8>, String> {
     // Reject file_id containing curly braces to prevent credential placeholder injection
     if file_id.contains('{') || file_id.contains('}') {
@@ -967,7 +907,7 @@ fn download_voice_file(file_id: &str) -> Result<Vec<u8>, String> {
     // Step 1: Call getFile to get file_path
     let get_file_url = format!(
         "https://api.telegram.org/bot{{TELEGRAM_BOT_TOKEN}}/getFile?file_id={}",
-        file_id
+        percent_encode(file_id)
     );
 
     let headers = serde_json::json!({});
@@ -1196,6 +1136,36 @@ const PHOTO_MIME_TYPES: &[&str] = &[
     "image/gif",
     "image/webp",
 ];
+
+/// Send a full agent response (attachments + text) to a chat.
+///
+/// Shared implementation for both `on_respond` and `on_broadcast`.
+fn send_response(
+    chat_id: i64,
+    response: &AgentResponse,
+    reply_to_message_id: Option<i64>,
+) -> Result<(), String> {
+    // Send attachments first (photos/documents)
+    for attachment in &response.attachments {
+        send_attachment(chat_id, attachment, reply_to_message_id)?;
+    }
+
+    // Skip text if empty and we already sent attachments
+    if response.content.is_empty() && !response.attachments.is_empty() {
+        return Ok(());
+    }
+
+    // Try Markdown, fall back to plain text on parse errors
+    match send_message(chat_id, &response.content, reply_to_message_id, Some("Markdown")) {
+        Ok(_) => Ok(()),
+        Err(SendError::ParseEntities(_)) => {
+            send_message(chat_id, &response.content, reply_to_message_id, None)
+                .map(|_| ())
+                .map_err(|e| format!("Plain-text retry also failed: {}", e))
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 /// Send a single attachment, choosing sendPhoto or sendDocument based on MIME type.
 fn send_attachment(

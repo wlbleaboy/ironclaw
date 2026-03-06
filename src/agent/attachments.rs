@@ -53,8 +53,24 @@ pub fn augment_with_attachments(
     Some(AugmentResult { text, image_parts })
 }
 
+/// Escape a string for use as an XML attribute value.
+fn escape_xml_attr(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Escape a string for use as XML text content.
+fn escape_xml_text(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
 fn format_attachment(index: usize, att: &IncomingAttachment) -> String {
-    let filename = att.filename.as_deref().unwrap_or("unknown");
+    let filename = escape_xml_attr(att.filename.as_deref().unwrap_or("unknown"));
+    let mime = escape_xml_attr(&att.mime_type);
 
     match &att.kind {
         AttachmentKind::Audio => {
@@ -64,7 +80,7 @@ fn format_attachment(index: usize, att: &IncomingAttachment) -> String {
                 .unwrap_or_default();
 
             let body = match &att.extracted_text {
-                Some(text) => format!("Transcript: {text}"),
+                Some(text) => format!("Transcript: {}", escape_xml_text(text)),
                 None => "Audio transcript unavailable.".to_string(),
             };
 
@@ -80,8 +96,6 @@ fn format_attachment(index: usize, att: &IncomingAttachment) -> String {
                 .map(|s| format!(" size=\"{}\"", format_size(s)))
                 .unwrap_or_default();
 
-            // When image data is available, the image will be sent as a
-            // multimodal content part. The text tag serves as a reference.
             let body = if att.data.is_empty() {
                 "[Image attached — visual content not available in this conversation]"
             } else {
@@ -89,25 +103,23 @@ fn format_attachment(index: usize, att: &IncomingAttachment) -> String {
             };
 
             format!(
-                "<attachment index=\"{index}\" type=\"image\" filename=\"{filename}\" mime=\"{}\"{size_attr}>\n\
+                "<attachment index=\"{index}\" type=\"image\" filename=\"{filename}\" mime=\"{mime}\"{size_attr}>\n\
                  {body}\n\
-                 </attachment>",
-                att.mime_type
+                 </attachment>"
             )
         }
         AttachmentKind::Document => {
             let body: String = match &att.extracted_text {
-                Some(text) => text.clone(),
+                Some(text) => escape_xml_text(text),
                 None => {
                     let size_info = att
                         .size_bytes
                         .map(|s| format!(" size=\"{}\"", format_size(s)))
                         .unwrap_or_default();
                     return format!(
-                        "<attachment index=\"{index}\" type=\"document\" filename=\"{filename}\" mime=\"{}\"{size_info}>\n\
+                        "<attachment index=\"{index}\" type=\"document\" filename=\"{filename}\" mime=\"{mime}\"{size_info}>\n\
                          [Document attached — text extraction unavailable]\n\
-                         </attachment>",
-                        att.mime_type
+                         </attachment>"
                     );
                 }
             };
