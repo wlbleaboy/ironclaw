@@ -99,6 +99,14 @@ impl Tool for RoutineCreateTool {
                     "type": "array",
                     "items": { "type": "string" },
                     "description": "Tool names pre-authorized for Always-approval tools in full_job mode (e.g. ['shell', 'message']). UnlessAutoApproved tools are automatically permitted in routines."
+                },
+                "notify_channel": {
+                    "type": "string",
+                    "description": "Channel to send results to (e.g. 'telegram', 'slack', 'tui'). Sets the default channel for message tool calls in routine jobs."
+                },
+                "notify_user": {
+                    "type": "string",
+                    "description": "User/target to notify (e.g. username, chat ID). Defaults to 'default'."
                 }
             },
             "required": ["name", "trigger_type", "prompt"]
@@ -239,7 +247,18 @@ impl Tool for RoutineCreateTool {
                 max_concurrent: 1,
                 dedup_window: None,
             },
-            notify: NotifyConfig::default(),
+            notify: NotifyConfig {
+                channel: params
+                    .get("notify_channel")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                user: params
+                    .get("notify_user")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default")
+                    .to_string(),
+                ..NotifyConfig::default()
+            },
             last_run_at: None,
             next_fire_at: next_fire,
             run_count: 0,

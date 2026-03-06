@@ -212,20 +212,22 @@ impl Tool for MessageTool {
         // (cross-channel messages are more sensitive)
         let param_channel = params.get("channel").and_then(|v| v.as_str());
         if let Some(channel) = param_channel {
-            // Check if it differs from the default channel
             let default_channel = self
                 .default_channel
                 .read()
                 .unwrap_or_else(|e| e.into_inner());
-            if let Some(default) = default_channel.as_ref()
-                && channel != default
-            {
-                return ApprovalRequirement::Always;
+            if let Some(default) = default_channel.as_ref() {
+                if channel != default {
+                    // Cross-channel message: always require approval
+                    return ApprovalRequirement::Always;
+                }
+                // Explicit channel matches default: same as omitting channel
+                return ApprovalRequirement::UnlessAutoApproved;
             }
-            // No default set - require approval for explicit channel selection
+            // No default set: require approval for explicit channel selection
             return ApprovalRequirement::Always;
         }
-        // No channel specified in params - uses default, less risky
+        // No channel specified in params: uses default, less risky
         ApprovalRequirement::UnlessAutoApproved
     }
 
@@ -563,8 +565,16 @@ mod tests {
         }));
         assert!(matches!(approval, ApprovalRequirement::UnlessAutoApproved));
 
-        // Explicit channel (even if same as default) -> Always
+        // Explicit channel matching default -> UnlessAutoApproved (same channel is safe)
         let approval = tool.requires_approval(&serde_json::json!({
+            "content": "hello",
+            "channel": "signal"
+        }));
+        assert!(matches!(approval, ApprovalRequirement::UnlessAutoApproved));
+
+        // Explicit channel with no default set -> Always
+        let tool_no_default = MessageTool::new(Arc::new(ChannelManager::new()));
+        let approval = tool_no_default.requires_approval(&serde_json::json!({
             "content": "hello",
             "channel": "signal"
         }));

@@ -582,7 +582,14 @@ mod tests {
                             "enum": ["lightweight", "full_job"],
                             "description": "Execution mode"
                         },
-                        "cooldown_secs": { "type": "integer", "description": "Min seconds between fires" }
+                        "cooldown_secs": { "type": "integer", "description": "Min seconds between fires" },
+                        "tool_permissions": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Pre-authorized tools for full_job mode"
+                        },
+                        "notify_channel": { "type": "string", "description": "Channel for message tool" },
+                        "notify_user": { "type": "string", "description": "User/target to notify" }
                     },
                     "required": ["name", "trigger_type", "prompt"]
                 }),

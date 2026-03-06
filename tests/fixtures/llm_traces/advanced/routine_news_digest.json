@@ -24,7 +24,9 @@
                   "prompt": "Fetch the latest tech news from the API, write a digest to workspace memory, then send a summary message to the user.",
                   "action_type": "full_job",
                   "tool_permissions": ["message", "http"],
-                  "cooldown_secs": 60
+                  "cooldown_secs": 60,
+                  "notify_channel": "test",
+                  "notify_user": "default"
                 }
               }
             ],
